@@ -1,0 +1,9 @@
+MeldMac is an independent macOS prototype licensed under GPL-2.0-or-later.
+
+Resources/myers.py is distributed unchanged from Meld 3.24.1:
+https://gitlab.gnome.org/GNOME/meld/-/blob/3.24.1/meld/matchers/myers.py
+Copyright (C) 2009-2013 Piotr Piastucki <the_leech@users.berlios.de>
+Copyright (C) 2012-2013 Kai Willadsen <kai.willadsen@gmail.com>
+This module is licensed under GPL version 2 or, at your option, any later version.
+Its original copyright and license notice is retained in the source.
+The full text of GPL version 2 is in LICENSE.
