@@ -2,6 +2,14 @@
 
 MeldMac is an independent file and folder comparison app for Apple Silicon. Its native interface uses SwiftUI and AppKit. The matching algorithm from Meld 3.24.1 determines which lines and characters differ.
 
+## Install on macOS
+
+Requires an Apple Silicon Mac running macOS 14 or later and Python 3 from the Xcode Command Line Tools. If you need the tools, run `xcode-select --install`.
+
+1. [Download the v0.1.0 DMG](https://github.com/melichron/meld-macos-silicon-native/releases/download/v0.1.0/MeldMac-0.1.0-arm64.dmg) or get a newer DMG from the [latest release](https://github.com/melichron/meld-macos-silicon-native/releases/latest).
+2. Open the DMG and drag **MeldMac** onto the **Applications** shortcut.
+3. Eject the disk image and open **MeldMac** from **Applications**.
+
 ## Build and run
 
 You need macOS 14 or later and Xcode Command Line Tools with Swift and Python 3. From the project directory, run:
