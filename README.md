@@ -1,28 +1,42 @@
-# meld-macos-silicon-native
+# MeldMac
 
-Независимый прототип для Apple Silicon. Интерфейс написан на SwiftUI и AppKit. Границы блоков для попарного сравнения текста вычисляет модуль из Meld 3.24.1.
+MeldMac is an independent file and folder comparison app for Apple Silicon. Its native interface uses SwiftUI and AppKit. The matching algorithm from Meld 3.24.1 determines which lines and characters differ.
 
-## Сборка и запуск
+## Build and run
 
-Нужны macOS 14 или новее и Xcode Command Line Tools с Swift и Python 3. Из каталога проекта:
+You need macOS 14 or later and Xcode Command Line Tools with Swift and Python 3. From the project directory, run:
 
 ```sh
 ./build.sh
 open MeldMac.app
 ```
 
-Открыть две папки или два файла при запуске:
+To open two files or two folders directly, pass their paths at launch:
 
 ```sh
-open -n MeldMac.app --args "/полный/путь/слева" "/полный/путь/справа"
+open -n MeldMac.app --args "/path/to/left" "/path/to/right"
 ```
 
-На стартовом экране доступны до 20 недавних пар файлов и папок. За каждый запуск сохраняется только первая успешно открытая пара. Повторное открытие этой пары при следующем запуске поднимает её в списке. Вернуться к списку можно через ⌘N, закрыть активную вкладку — через ⌘W. Переключатель «Тема» действует на все окна и запоминает выбор.
+## Recent comparisons and appearance
 
-В сравнении папок совпадающие элементы отмечены серым, изменённые — синим, элементы только с одной стороны — зелёным. По умолчанию сканирование пропускает записи с именем `.git` на любом уровне вложенности. Переключатель «Показывать .git» включает их для текущей пары папок.
+The start screen lists up to 20 recent pairs. Each launch adds only the first pair you successfully open. Opening that pair first on a later launch moves it to the top. Press **⌘N** to return to the list and **⌘W** to close the active tab. The theme selector applies to all windows and remembers your choice.
 
-В сравнении папок нажмите имя файла, чтобы открыть пару в отдельной вкладке. Зелёная строка со стрелкой позволяет скопировать файл на пустую сторону прямо на диске. В текстовой вкладке обе панели поддерживают редактирование. Различия пересчитываются после короткой паузы во вводе. Вертикальная прокрутка редакторов синхронизируется по блокам сравнения. При прокрутке односторонней вставки соседняя панель остаётся у соответствующей границы. Цветные ленты между панелями соединяют границы изменённых блоков. При вставке или удалении лента сужается к месту вставки. Меню «Блоки» переводит обе панели к выбранному отличию. Вид «По блокам» показывает выровненные строки. В редакторе поставьте курсор в изменённый блок: на ленте рядом со строкой появится стрелка копирования из активной панели в соседнюю. Стрелки переносят отдельные блоки в памяти. Нажмите ⌘S для сохранения или ⌘Z для отмены. Текстовый просмотр поддерживает UTF-8, файлы до 4 МБ и единый тип окончания строк в каждом файле.
+## Compare folders
 
-## Лицензия
+Matching entries appear in gray, changed entries in blue, and entries present on only one side in green. By default, the scan skips entries named `.git` at every directory level. Enable the `.git` checkbox to include them for the current pair.
 
-MeldMac распространяется по GPL-2.0-or-later. Текст лицензии находится в [LICENSE](LICENSE), сведения об оригинальном модуле Meld и его авторах — в [NOTICE](NOTICE). Обе копии включаются в собранное приложение. При публикации бинарного релиза предоставьте получателям соответствующие исходники, включая этот скрипт сборки.
+Click a filename to compare its two versions in a separate tab. Click the arrow on a green file row to copy the whole file to the missing side. This writes the file to disk immediately.
+
+## Compare and edit text
+
+You can edit either pane. After a short pause in typing, the app updates the changed blocks and highlights differences within lines. The editors scroll together by matching block. When you scroll through a one-sided insertion, the other pane stays at the corresponding insertion point.
+
+Colored ribbons connect the edges of corresponding blocks and taper to a point for insertions and deletions. Use the block menu to jump to a difference in both panes, or switch to the block view to see aligned rows.
+
+Place the caret in a changed block to show a copy arrow on the ribbon beside that line. Clicking it copies the entire block from the active pane to the other pane **in memory**. Press **⌘S** to save or **⌘Z** to undo. The editor supports UTF-8 files up to 4 MB, with one consistent line-ending style per file.
+
+## License and credits
+
+MeldMac's code is licensed under GPL-2.0-or-later. See [LICENSE](LICENSE) for the license text and [NOTICE](NOTICE) for the original Meld module and its authors. The application bundle includes both files. When distributing a binary release, provide the corresponding source code, including the build script.
+
+The application icon uses the original Meld artwork by the GNOME Design Team, converted to the macOS icon format under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The [original SVG](Resources/Meld.svg) is included in this repository.

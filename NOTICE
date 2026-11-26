@@ -7,3 +7,10 @@ Copyright (C) 2012-2013 Kai Willadsen <kai.willadsen@gmail.com>
 This module is licensed under GPL version 2 or, at your option, any later version.
 Its original copyright and license notice is retained in the source.
 The full text of GPL version 2 is in LICENSE.
+
+Application icon by the GNOME Design Team, from Meld 3.24.1:
+https://gitlab.gnome.org/GNOME/meld/-/blob/3.24.1/data/icons/hicolor/scalable/apps/org.gnome.Meld.svg
+Resources/Meld.svg retains the original artwork and metadata. Resources/MeldMac.icns
+is a multi-resolution macOS conversion of that artwork. Both are licensed under
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/
