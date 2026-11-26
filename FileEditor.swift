@@ -6,7 +6,9 @@ struct FileEditor: NSViewRepresentable {
     @ObservedObject var model: Model
     let side: Int
 
-    func makeCoordinator() -> Coordinator { Coordinator(model, side: side) }
+    let links: EditorLinks
+
+    func makeCoordinator() -> Coordinator { Coordinator(model, side: side, links: links) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView()
@@ -30,6 +32,7 @@ struct FileEditor: NSViewRepresentable {
         text.setAccessibilityLabel(side == 0 ? "Левый редактор" : "Правый редактор")
         scroll.documentView = text
         text.delegate = context.coordinator
+        context.coordinator.attach(text, scroll: scroll)
         return scroll
     }
 
@@ -47,10 +50,26 @@ struct FileEditor: NSViewRepresentable {
         var refreshing = false
         var starts: [Int] = []
 
-        init(_ model: Model, side: Int) {
+        weak var textView: NSTextView?
+        let links: EditorLinks
+        init(_ model: Model, side: Int, links: EditorLinks) {
+            self.links = links
             self.model = model
             self.side = side
         }
+
+        func attach(_ text: NSTextView, scroll: NSScrollView) {
+            textView = text
+            if side == 0 { links.left = self } else { links.right = self }
+            let clip = scroll.contentView
+            clip.postsBoundsChangedNotifications = true
+            clip.postsFrameChangedNotifications = true
+            for event in [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification] {
+                NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: event, object: clip)
+            }
+        }
+
+        @objc private func redraw() { links.gutter?.needsDisplay = true }
 
         func textDidChange(_ notification: Notification) {
             guard !refreshing, let text = notification.object as? NSTextView else { return }
@@ -74,6 +93,7 @@ struct FileEditor: NSViewRepresentable {
         }
 
         func refresh(_ text: NSTextView) {
+            redraw()
             guard !text.hasMarkedText(), model.docs.indices.contains(side) else { return }
             refreshing = true
             defer { refreshing = false }

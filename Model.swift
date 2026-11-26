@@ -137,7 +137,7 @@ func compare(_ docs: [Document]) throws -> [Band] {
     @Published var roots: [URL] = []
     @Published var showEqual = true
     @Published private(set) var includeGit = false
-    var didOpen: (([URL], Bool) -> Void)?
+    var willOpen: (([URL], Bool) -> (Bool) -> Void)?
     @Published var search = ""
     @Published var busy = false
     @Published var message: String?
@@ -207,9 +207,11 @@ func compare(_ docs: [Document]) throws -> [Band] {
     }
 
     func open(_ urls: [URL], folders: Bool, fromList: Bool = false) {
-        guard !dirty, urls.count == 2 else { return }
+        guard !busy, !dirty, urls.count == 2 else { return }
+        let finished = folders && roots == urls ? nil : willOpen?(urls, folders)
         work { [self] in
-            let refresh = folders && roots == urls
+            var success = false
+            defer { finished?(success) }
             if folders {
                 entries = try await scan(urls, includeGit: includeGit)
                 roots = urls
@@ -225,7 +227,7 @@ func compare(_ docs: [Document]) throws -> [Band] {
                 if !fromList { roots = []; entries = [] }
             }
             history = []
-            if !refresh { didOpen?(urls, folders) }
+            success = true
         }
     }
 

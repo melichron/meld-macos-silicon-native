@@ -6,6 +6,8 @@ struct ComparisonView: View {
     @ObservedObject var model: Model
     @ObservedObject var preferences: Preferences
 
+    @StateObject private var links = EditorLinks()
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -99,9 +101,9 @@ struct ComparisonView: View {
                 Divider()
                 if model.editing {
                     HStack(spacing: 0) {
-                        FileEditor(model: model, side: 0)
-                        Divider()
-                        FileEditor(model: model, side: 1)
+                        FileEditor(model: model, side: 0, links: links)
+                        EditorGutter(model: model, links: links).frame(width: 54)
+                        FileEditor(model: model, side: 1, links: links)
                     }
                 } else if model.currentDiff {
                     ScrollView {
@@ -118,7 +120,13 @@ struct ComparisonView: View {
                                     line(1, row)
                                 }.padding(.vertical, 2)
                                 .background(row.band.changed ? (row.band.left.isEmpty || row.band.right.isEmpty ? Color.green : Color.blue).opacity(0.22) : Color.clear)
+                                .anchorPreference(key: BlockAnchors.self, value: .bounds) {
+                                    row.band.changed ? [BlockAnchor(row: row, bounds: $0)] : []
+                                }
                             }
+                        }
+                        .backgroundPreferenceValue(BlockAnchors.self) { anchors in
+                            AlignedGutter(anchors: anchors)
                         }
                     }
                 } else { Spacer() }
@@ -187,6 +195,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         let file = NSMenu(title: "Файл")
         file.addItem(withTitle: "Недавние сравнения", action: #selector(showHome), keyEquivalent: "n").target = self
         file.addItem(withTitle: "Сохранить изменения", action: #selector(saveComparison), keyEquivalent: "s").target = self
+        file.addItem(withTitle: "Закрыть вкладку", action: #selector(closeTab), keyEquivalent: "w").target = self
         let fileItem = NSMenuItem()
         fileItem.submenu = file
         menu.addItem(fileItem)
@@ -210,7 +219,6 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         if !urls.isEmpty, let existing = models.first(where: { _, model in
             folders ? model.roots == urls : model.docs.map(\.url) == urls
         }) {
-            preferences.record(urls, folders: folders)
             existing.key.makeKeyAndOrderFront(nil)
             return
         }
@@ -230,7 +238,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
                 self.present(urls, folders: folders, parent: window)
             }
         }
-        model.didOpen = { [preferences] urls, folders in preferences.record(urls, folders: folders) }
+        model.willOpen = { [preferences] urls, folders in preferences.beginComparison(urls, folders: folders) }
         model.didSave = { [weak self] in
             for m in self?.models.values.filter({ !$0.roots.isEmpty }) ?? [] { m.open(m.roots, folders: true) }
         }
@@ -252,6 +260,11 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         }
     }
 
+    @objc func closeTab() {
+        guard let window = NSApp.keyWindow, models[window] != nil else { return }
+        (window.tabGroup?.selectedWindow ?? window).performClose(nil)
+    }
+
     @objc func saveComparison() { currentModel?.save() }
 
     @objc func undoComparison() {
@@ -260,6 +273,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
+        case #selector(closeTab): return currentModel != nil
         case #selector(saveComparison): return currentModel?.dirty == true
         case #selector(undoComparison): return currentModel?.history.isEmpty == false
         default: return true

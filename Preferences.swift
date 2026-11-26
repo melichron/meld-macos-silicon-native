@@ -23,6 +23,13 @@ enum Theme: String, CaseIterable {
 }
 
 @MainActor final class Preferences: ObservableObject {
+    private struct Attempt {
+        let id = UUID()
+        let item: RecentComparison
+        var succeeded: Bool?
+    }
+    private var pending: [Attempt] = []
+    private var recordedThisLaunch = false
     private let defaults: UserDefaults
     @Published private(set) var recent: [RecentComparison]
     @Published var theme: Theme {
@@ -40,10 +47,28 @@ enum Theme: String, CaseIterable {
         theme = defaults.string(forKey: "theme").flatMap(Theme.init(rawValue:)) ?? .system
     }
 
-    func record(_ urls: [URL], folders: Bool) {
+    func beginComparison(_ urls: [URL], folders: Bool) -> (Bool) -> Void {
+        guard !recordedThisLaunch else { return { _ in } }
         let item = RecentComparison(left: urls[0].standardizedFileURL.path,
                                     right: urls[1].standardizedFileURL.path, folders: folders)
-        recent = [item] + recent.filter { $0 != item }.prefix(19)
-        defaults.set(try? JSONEncoder().encode(recent), forKey: "recentComparisons")
+        let attempt = Attempt(item: item)
+        pending.append(attempt)
+        return { [weak self] success in self?.finish(attempt.id, success: success) }
+    }
+
+    private func finish(_ id: UUID, success: Bool) {
+        guard let index = pending.firstIndex(where: { $0.id == id }) else { return }
+        pending[index].succeeded = success
+        // A later, faster file comparison can finish before a folder scan.
+        while let first = pending.first, let success = first.succeeded {
+            pending.removeFirst()
+            if success {
+                recordedThisLaunch = true
+                pending.removeAll()
+                recent = [first.item] + recent.filter { $0 != first.item }.prefix(19)
+                defaults.set(try? JSONEncoder().encode(recent), forKey: "recentComparisons")
+                return
+            }
+        }
     }
 }
