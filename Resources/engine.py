@@ -1,17 +1,62 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
+from bisect import bisect_right
 import json
 import os
 import stat
 import sys
 
-from myers import MyersSequenceMatcher
+from myers import InlineMyersSequenceMatcher, MyersSequenceMatcher
 
 
 def chunks(left, right):
     # Meld's Differ uses pane 1 as the base, including for two-pane diffs.
     matcher = MyersSequenceMatcher(None, right, left)
-    return [[op.start_b, op.end_b, op.start_a, op.end_a]
-            for op in matcher.get_difference_opcodes()]
+    result = []
+    for op in matcher.get_difference_opcodes():
+        left_marks, right_marks = {}, {}
+        if op.tag == "replace":
+            left_marks, right_marks = inline_marks(left, right, op)
+        result.append(dict(leftStart=op.start_b, leftEnd=op.end_b,
+                           rightStart=op.start_a, rightEnd=op.end_a,
+                           leftMarks=left_marks, rightMarks=right_marks))
+    return result
+
+
+def inline_marks(left, right, op):
+    # Compare the same multi-line buffer slices as Meld, including an LF
+    # when a block ends at the beginning of another line.
+    sides = [(right, op.start_a, op.end_a), (left, op.start_b, op.end_b)]
+    texts = ["\n".join(lines[start:end]) + ("\n" if end < len(lines) else "")
+             for lines, start, end in sides]
+    if sum(map(len, texts)) > 20000:
+        return {}, {}
+
+    starts = []
+    for lines, begin, end in sides:
+        offsets = [0]
+        for line in lines[begin:end]:
+            offsets.append(offsets[-1] + len(line) + 1)
+        starts.append(offsets)
+
+    marks = [{}, {}]
+    for match in InlineMyersSequenceMatcher(None, *texts).get_opcodes():
+        if match.tag == "equal":
+            at_start = match.start_a == match.start_b == 0
+            at_end = match.end_a == len(texts[0]) and match.end_b == len(texts[1])
+            if at_start or at_end or match.end_a - match.start_a >= 3:
+                continue
+        for side, (lo, hi) in enumerate(((match.start_a, match.end_a),
+                                         (match.start_b, match.end_b))):
+            offsets = starts[side]
+            row = bisect_right(offsets, lo) - 1
+            while lo < hi and row + 1 < len(offsets):
+                stop = min(hi, offsets[row + 1] - 1)
+                if lo < stop:
+                    marks[side].setdefault(row, []).append(
+                        dict(start=lo - offsets[row], end=stop - offsets[row]))
+                row += 1
+                lo = offsets[row]
+    return marks[1], marks[0]
 
 
 def inventory(root):

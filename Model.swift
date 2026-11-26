@@ -81,10 +81,21 @@ func engine<T: Decodable>(_ operation: String, _ input: Data) throws -> T {
     return try JSONDecoder().decode(T.self, from: data)
 }
 
+struct InlineSpan: Decodable {
+    let start: Int
+    let end: Int
+}
+
+private struct FileChange: Decodable {
+    let leftStart, leftEnd, rightStart, rightEnd: Int
+    let leftMarks, rightMarks: [Int: [InlineSpan]]
+}
+
 struct Band: Identifiable {
     let id: Int
     let left: Range<Int>
     let right: Range<Int>
+    let leftMarks, rightMarks: [Int: [InlineSpan]]
     let changed: Bool
 }
 struct DisplayRow: Identifiable {
@@ -93,21 +104,22 @@ struct DisplayRow: Identifiable {
     var id: String { "\(band.id)/\(offset)" }
 }
 func compare(_ docs: [Document]) throws -> [Band] {
-    let changes: [[Int]] = try engine("diff", JSONEncoder().encode(docs.map(\.lines)))
+    let changes: [FileChange] = try engine("diff", JSONEncoder().encode(docs.map(\.lines)))
     var result: [Band] = []
     var a = 0, b = 0
-    func append(_ endA: Int, _ endB: Int, _ changed: Bool) {
+    func append(_ endA: Int, _ endB: Int, _ change: FileChange? = nil) {
         if a < endA || b < endB {
-            result.append(Band(id: result.count, left: a..<endA, right: b..<endB, changed: changed))
+            result.append(Band(id: result.count, left: a..<endA, right: b..<endB, leftMarks: change?.leftMarks ?? [:],
+                               rightMarks: change?.rightMarks ?? [:], changed: change != nil))
         }
         a = endA
         b = endB
     }
     for c in changes {
-        append(c[0], c[2], false)
-        append(c[1], c[3], true)
+        append(c.leftStart, c.rightStart)
+        append(c.leftEnd, c.rightEnd, c)
     }
-    append(docs[0].lines.count, docs[1].lines.count, false)
+    append(docs[0].lines.count, docs[1].lines.count)
     return result
 }
 

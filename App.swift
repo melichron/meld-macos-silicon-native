@@ -64,14 +64,14 @@ struct ComparisonView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(model.rows) { row in
                             HStack(alignment: .top, spacing: 0) {
-                                line(0, row.band.left, row.offset)
+                                line(0, row)
                                 HStack(spacing: 2) {
                                     if row.band.changed && row.offset == 0 {
                                         Button("←") { model.transfer(row.band, to: 0) }.help("Заменить блок слева версией справа")
                                         Button("→") { model.transfer(row.band, to: 1) }.help("Заменить блок справа версией слева")
                                     }
                                 }.controlSize(.small).frame(width: 62)
-                                line(1, row.band.right, row.offset)
+                                line(1, row)
                             }.padding(.vertical, 2)
                             .background(row.band.changed ? (row.band.left.isEmpty || row.band.right.isEmpty ? Color.green : Color.blue).opacity(0.22) : Color.clear)
                         }
@@ -81,15 +81,51 @@ struct ComparisonView: View {
         }
     }
 
-    func line(_ side: Int, _ range: Range<Int>, _ offset: Int) -> some View {
+    func line(_ side: Int, _ row: DisplayRow) -> some View {
+        let range = side == 0 ? row.band.left : row.band.right
+        let marks = (side == 0 ? row.band.leftMarks : row.band.rightMarks)[row.offset] ?? []
+        let offset = row.offset
         let idx = range.lowerBound + offset
         let valid = idx < range.upperBound
         return HStack(alignment: .top, spacing: 6) {
             Text(valid ? String(idx + 1) : "").foregroundStyle(.secondary).frame(width: 45, alignment: .trailing)
-            Text(verbatim: valid ? model.docs[side].lines[idx] : "").textSelection(.enabled)
+            highlightedLine(valid ? model.docs[side].lines[idx] : "", spans: marks).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
         }.font(.system(size: 12, design: .monospaced)).frame(maxWidth: .infinity)
     }
+}
+
+// The matcher counts Unicode scalars. Highlight a complete visible character
+// even when only one of its combining marks or emoji components changed.
+private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
+    guard !spans.isEmpty else { return Text(verbatim: line) }
+    var result = AttributedString()
+    var run = line.startIndex
+    var highlighted = false
+    var scalar = 0
+    var span = 0
+    func appendRun(to end: String.Index) {
+        guard run < end else { return }
+        var part = AttributedString(String(line[run..<end]))
+        if highlighted {
+            part.backgroundColor = .orange.opacity(0.60)
+            part.inlinePresentationIntent = .stronglyEmphasized
+        }
+        result.append(part)
+    }
+    for index in line.indices {
+        while span < spans.count && spans[span].end <= scalar { span += 1 }
+        let next = scalar + line[index].unicodeScalars.count
+        let changed = span < spans.count && spans[span].start < next
+        if changed != highlighted {
+            appendRun(to: index)
+            run = index
+            highlighted = changed
+        }
+        scalar = next
+    }
+    appendRun(to: line.endIndex)
+    return Text(result)
 }
 
 @MainActor final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
