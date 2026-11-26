@@ -90,12 +90,69 @@ struct EditorGutter: NSViewRepresentable {
     }
     func updateNSView(_ view: GutterView, context: Context) {
         view.needsDisplay = true
+        view.needsLayout = true
     }
 }
 
 @MainActor final class GutterView: NSView {
     weak var links: EditorLinks?
     override var isFlipped: Bool { true }
+
+    private let copyButton = NSButton()
+    private var displayed: (side: Int, bandID: Int, revision: Int)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        copyButton.bezelStyle = .rounded
+        copyButton.controlSize = .small
+        copyButton.refusesFirstResponder = true
+        copyButton.target = self
+        copyButton.action = #selector(copyAtCaret)
+        copyButton.isHidden = true
+        addSubview(copyButton)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+
+    private func caretBlock() -> (FileEditor.Coordinator, Band)? {
+        for case let editor? in [links?.left, links?.right] {
+            if let change = editor.changeAtCaret(includeEmpty: false) { return (editor, change.element) }
+        }
+        return nil
+    }
+
+    override func layout() {
+        super.layout()
+        guard let (editor, band) = caretBlock(), let text = editor.textView, let window,
+              let selection = text.selectedRanges.first?.rangeValue, selection.length == 0 else {
+            displayed = nil
+            copyButton.isHidden = true
+            return
+        }
+        let caret = text.firstRect(forCharacterRange: selection, actualRange: nil)
+        let rect = convert(window.convertFromScreen(caret), from: nil)
+        guard rect.maxY > bounds.minY, rect.minY < bounds.maxY, caret.height > 0 else {
+            displayed = nil
+            copyButton.isHidden = true
+            return
+        }
+        displayed = (editor.side, band.id, editor.model.revision)
+        copyButton.title = editor.side == 0 ? "→" : "←"
+        let label = editor.side == 0 ? "Скопировать блок вправо" : "Скопировать блок влево"
+        copyButton.toolTip = label
+        copyButton.setAccessibilityLabel(label)
+        let height: CGFloat = 21
+        let y = max(bounds.minY, min(rect.midY - height / 2, bounds.maxY - height))
+        copyButton.frame = NSRect(x: bounds.midX - 16, y: y.rounded(), width: 32, height: height)
+        copyButton.isHidden = false
+    }
+
+    @objc private func copyAtCaret() {
+        guard let displayed, let (editor, band) = caretBlock(),
+              editor.side == displayed.side, band.id == displayed.bandID,
+              editor.model.revision == displayed.revision, editor.textView?.selectedRange().length == 0 else { return }
+        editor.model.transfer(band, to: 1 - editor.side)
+    }
 
     private func endpoints(_ editor: FileEditor.Coordinator) -> (visible: NSRange, y: (Int) -> CGFloat)? {
         guard let text = editor.textView, let layout = text.layoutManager, let container = text.textContainer,

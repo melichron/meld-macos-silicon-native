@@ -2,6 +2,22 @@
 import SwiftUI
 import AppKit
 
+private final class EditorTextView: NSTextView {
+    var focusChanged: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { focusChanged?() }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted { focusChanged?() }
+        return accepted
+    }
+}
+
 struct FileEditor: NSViewRepresentable {
     @ObservedObject var model: Model
     let side: Int
@@ -14,7 +30,8 @@ struct FileEditor: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        let text = NSTextView(frame: scroll.contentView.bounds)
+        let text = EditorTextView(frame: scroll.contentView.bounds)
+        text.focusChanged = { [weak links] in links?.gutter?.needsLayout = true }
         text.isRichText = false
         text.isAutomaticQuoteSubstitutionEnabled = false
         text.isAutomaticDashSubstitutionEnabled = false
@@ -123,7 +140,10 @@ struct FileEditor: NSViewRepresentable {
             return top + (row - CGFloat(index)) * (lineY(index + 1) - top)
         }
 
-        @objc private func redraw() { links.gutter?.needsDisplay = true }
+        @objc private func redraw() {
+            links.gutter?.needsDisplay = true
+            links.gutter?.needsLayout = true
+        }
 
         func textDidChange(_ notification: Notification) {
             guard !refreshing, let text = notification.object as? NSTextView else { return }
@@ -133,16 +153,21 @@ struct FileEditor: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard !refreshing, model.currentDiff, paintedRevision == model.revision,
-                  let text = notification.object as? NSTextView, text.window?.firstResponder === text else { return }
+            links.gutter?.needsLayout = true
+            guard !refreshing, let change = changeAtCaret(includeEmpty: true) else { return }
+            model.activeBlock = change.offset
+        }
+
+        func changeAtCaret(includeEmpty: Bool) -> (offset: Int, element: Band)? {
+            guard model.currentDiff, readyForScroll, let text = textView,
+                  text.window?.firstResponder === text, !text.hasMarkedText() else { return nil }
             let caret = text.selectedRange().location
-            for (index, band) in model.changes.enumerated() {
+            return model.changes.enumerated().first { _, band in
                 let rows = side == 0 ? band.left : band.right
-                if starts[rows.lowerBound] <= caret && (caret < starts[rows.upperBound] ||
-                    (caret == starts[rows.upperBound] && (rows.isEmpty || rows.upperBound == starts.count - 1))) {
-                    model.activeBlock = index
-                    break
-                }
+                if rows.isEmpty { return includeEmpty && starts[rows.lowerBound] == caret }
+                return starts[rows.lowerBound] <= caret &&
+                    (caret < starts[rows.upperBound] ||
+                     (rows.upperBound == starts.count - 1 && caret == starts[rows.upperBound]))
             }
         }
 
