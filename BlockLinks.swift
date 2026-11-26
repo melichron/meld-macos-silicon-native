@@ -19,6 +19,64 @@ private func ribbon(width: CGFloat, left: ClosedRange<CGFloat>, right: ClosedRan
     weak var left: FileEditor.Coordinator?
     weak var right: FileEditor.Coordinator?
     weak var gutter: GutterView?
+    private weak var driver: FileEditor.Coordinator?
+    private var syncing = false
+
+    func scrolled(_ source: FileEditor.Coordinator) {
+        guard !syncing, !source.refreshing else { return }
+        driver = source
+        synchronize()
+    }
+
+    func synchronize() {
+        guard !syncing, let source = driver,
+              let target = source.side == 0 ? right : left,
+              source.model.currentDiff, source.readyForScroll, target.readyForScroll,
+              let from = source.textView?.enclosingScrollView?.contentView,
+              let to = target.textView?.enclosingScrollView?.contentView else { return }
+        syncing = true
+        defer { syncing = false }
+        let travel = from.documentRect.height - from.bounds.height
+        guard travel > 0 else { return }
+        let y = min(max(0, from.bounds.minY), travel)
+        // Track the middle of the viewport, moving the anchor to its edges
+        // near the start and end so both panes can reach their limits.
+        let edge = min(from.bounds.height / 2, travel / 2)
+        guard edge > 0 else { return }
+        let fraction = 0.5 * (min(y / edge, 1) + max(0, 1 - (travel - y) / edge))
+        let destination: CGFloat
+        if y == 0 {
+            destination = 0
+        } else if y == travel {
+            destination = to.documentRect.maxY - to.bounds.height
+        } else {
+            let row = source.logicalPosition(at: y + fraction * from.bounds.height)
+            guard let mapped = map(row, bands: source.model.bands, side: source.side) else { return }
+            destination = target.documentY(at: mapped) - fraction * to.bounds.height
+        }
+        var bounds = to.bounds
+        bounds.origin.y = destination
+        let point = to.constrainBoundsRect(bounds).origin
+        if abs(point.y - to.bounds.minY) >= 0.5 {
+            to.scroll(to: point)
+            target.textView?.enclosingScrollView?.reflectScrolledClipView(to)
+        }
+    }
+
+    private func map(_ row: CGFloat, bands: [Band], side: Int) -> CGFloat? {
+        var lo = 0, hi = bands.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            let range = side == 0 ? bands[mid].left : bands[mid].right
+            if CGFloat(range.upperBound) <= row { lo = mid + 1 } else { hi = mid }
+        }
+        guard lo < bands.count else {
+            return bands.last.map { CGFloat(side == 0 ? $0.right.upperBound : $0.left.upperBound) }
+        }
+        let src = side == 0 ? bands[lo].left : bands[lo].right
+        let dst = side == 0 ? bands[lo].right : bands[lo].left
+        return CGFloat(dst.lowerBound) + (row - CGFloat(src.lowerBound)) * CGFloat(dst.count) / CGFloat(src.count)
+    }
 }
 
 struct EditorGutter: NSViewRepresentable {
@@ -46,21 +104,8 @@ struct EditorGutter: NSViewRepresentable {
         let visible = text.visibleRect.offsetBy(dx: -origin.x, dy: -origin.y)
         let glyphs = layout.glyphRange(forBoundingRect: visible, in: container)
         let chars = layout.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
-        let count = editor.starts.count - 1
-        let length = editor.starts[count]
         return (chars, { row in
-            let offset = editor.starts[row]
-            let line: CGRect
-            if offset == length && layout.extraLineFragmentTextContainer != nil {
-                line = layout.extraLineFragmentRect
-            } else if length > 0 {
-                let glyph = layout.glyphIndexForCharacter(at: min(offset, length - 1))
-                line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-            } else {
-                line = CGRect(x: 0, y: 0, width: 1, height: layout.defaultLineHeight(for: text.font!))
-            }
-            let y = row == count ? line.maxY : line.minY
-            return self.convert(NSPoint(x: 0, y: origin.y + y), from: text).y
+            self.convert(NSPoint(x: 0, y: editor.lineY(row)), from: text).y
         })
     }
 

@@ -50,6 +50,7 @@ struct FileEditor: NSViewRepresentable {
         var refreshing = false
         var starts: [Int] = []
 
+        private var lastScrollY: CGFloat = 0
         weak var textView: NSTextView?
         let links: EditorLinks
         init(_ model: Model, side: Int, links: EditorLinks) {
@@ -64,9 +65,62 @@ struct FileEditor: NSViewRepresentable {
             let clip = scroll.contentView
             clip.postsBoundsChangedNotifications = true
             clip.postsFrameChangedNotifications = true
-            for event in [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification] {
-                NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: event, object: clip)
+            NotificationCenter.default.addObserver(self, selector: #selector(boundsChanged(_:)),
+                name: NSView.boundsDidChangeNotification, object: clip)
+            NotificationCenter.default.addObserver(self, selector: #selector(redraw),
+                name: NSView.frameDidChangeNotification, object: clip)
+        }
+
+        @objc private func boundsChanged(_ note: Notification) {
+            redraw()
+            guard let clip = note.object as? NSClipView, clip.bounds.minY != lastScrollY else { return }
+            lastScrollY = clip.bounds.minY
+            links.scrolled(self)
+        }
+
+        var readyForScroll: Bool {
+            paintedRevision == model.revision && !starts.isEmpty &&
+                starts.last == textView?.textStorage?.length && textView?.layoutManager != nil
+        }
+
+        // Use TextKit's laid-out line boundaries for both scrolling and ribbons.
+        func lineY(_ row: Int) -> CGFloat {
+            guard let text = textView, let layout = text.layoutManager,
+                  let length = text.textStorage?.length else { return 0 }
+            let offset = min(starts[row], length)
+            let line: CGRect
+            if offset == length && layout.extraLineFragmentTextContainer != nil {
+                line = layout.extraLineFragmentRect
+            } else if length > 0 {
+                let glyph = layout.glyphIndexForCharacter(at: min(offset, length - 1))
+                line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            } else {
+                line = CGRect(x: 0, y: 0, width: 1, height: layout.defaultLineHeight(for: text.font!))
             }
+            return text.textContainerOrigin.y + (row == starts.count - 1 ? line.maxY : line.minY)
+        }
+
+        func logicalPosition(at y: CGFloat) -> CGFloat {
+            guard let text = textView, let layout = text.layoutManager,
+                  let container = text.textContainer else { return 0 }
+            let point = NSPoint(x: 0, y: y - text.textContainerOrigin.y)
+            let index = layout.characterIndex(for: point, in: container,
+                                              fractionOfDistanceBetweenInsertionPoints: nil)
+            var lo = 0, hi = starts.count - 1
+            while lo + 1 < hi {
+                let mid = (lo + hi) / 2
+                if starts[mid] <= index { lo = mid } else { hi = mid }
+            }
+            let top = lineY(lo)
+            let progress = (y - top) / max(1, lineY(lo + 1) - top)
+            return CGFloat(lo) + min(1, max(0, progress))
+        }
+
+        func documentY(at row: CGFloat) -> CGFloat {
+            let index = min(Int(row), starts.count - 1)
+            let top = lineY(index)
+            guard index + 1 < starts.count else { return top }
+            return top + (row - CGFloat(index)) * (lineY(index + 1) - top)
         }
 
         @objc private func redraw() { links.gutter?.needsDisplay = true }
@@ -128,6 +182,7 @@ struct FileEditor: NSViewRepresentable {
                     }
                 }
                 paintedRevision = model.revision
+                if lastJump == model.jumpRequest { links.synchronize() }
             }
             if lastJump != model.jumpRequest, let band = model.selectedChange {
                 lastJump = model.jumpRequest
