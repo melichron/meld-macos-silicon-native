@@ -135,7 +135,9 @@ func compare(_ docs: [Document]) throws -> [Band] {
     var rows: [DisplayRow] = []
     @Published var entries: [Entry] = []
     @Published var roots: [URL] = []
-    @Published var showEqual = false
+    @Published var showEqual = true
+    @Published private(set) var includeGit = false
+    var didOpen: (([URL], Bool) -> Void)?
     @Published var search = ""
     @Published var busy = false
     @Published var message: String?
@@ -166,6 +168,20 @@ func compare(_ docs: [Document]) throws -> [Band] {
     var newComparison: (([URL], Bool) -> Void)?
     var didSave: (() -> Void)?
 
+    private func scan(_ paths: [URL], includeGit: Bool) async throws -> [Entry] {
+        try await Task.detached {
+            let args: [Any] = [paths[0].path, paths[1].path, includeGit]
+            return try engine("folders", JSONSerialization.data(withJSONObject: args))
+        }.value
+    }
+
+    func showGit(_ enabled: Bool) {
+        work { [self] in
+            entries = try await scan(roots, includeGit: enabled)
+            includeGit = enabled
+        }
+    }
+
     func copyFile(_ entry: Entry) {
         guard let side = entry.copySource, roots.count == 2 else { return }
         let paths = roots
@@ -176,9 +192,7 @@ func compare(_ docs: [Document]) throws -> [Band] {
                     try copyMissing(entry.path, from: paths[side], to: paths[1-side])
                 }.value
             } catch { failure = error }
-            entries = try await Task.detached {
-                try engine("folders", JSONEncoder().encode(paths.map(\.path))) as [Entry]
-            }.value
+            entries = try await scan(paths, includeGit: includeGit)
             if let failure { throw Problem(entry.path + " — " + failure.localizedDescription) }
         }
     }
@@ -195,11 +209,9 @@ func compare(_ docs: [Document]) throws -> [Band] {
     func open(_ urls: [URL], folders: Bool, fromList: Bool = false) {
         guard !dirty, urls.count == 2 else { return }
         work { [self] in
+            let refresh = folders && roots == urls
             if folders {
-                let rows: [Entry] = try await Task.detached {
-                    try engine("folders", JSONEncoder().encode(urls.map(\.path)))
-                }.value
-                entries = rows
+                entries = try await scan(urls, includeGit: includeGit)
                 roots = urls
                 docs = []
                 bands = []
@@ -213,6 +225,7 @@ func compare(_ docs: [Document]) throws -> [Band] {
                 if !fromList { roots = []; entries = [] }
             }
             history = []
+            if !refresh { didOpen?(urls, folders) }
         }
     }
 

@@ -29,8 +29,17 @@ struct Folders: View {
         switch entry.status {
         case "Только слева", "Только справа": return .green
         case "Изменён": return .blue
-        case "Совпадает": return .primary
+        case "Совпадает": return Color(nsColor: .secondaryLabelColor)
         default: return .red
+        }
+    }
+
+    private func statusSymbol(_ entry: Entry) -> String {
+        switch entry.status {
+        case "Совпадает": return "equal.circle"
+        case "Изменён": return "pencil"
+        case "Только слева", "Только справа": return "plus"
+        default: return "exclamationmark.triangle"
         }
     }
 
@@ -39,10 +48,14 @@ struct Folders: View {
             HStack {
                 TextField("Найти по пути", text: $model.search).frame(maxWidth: 280)
                 Toggle("Включая совпадающие", isOn: $model.showEqual)
+                Toggle("Показывать .git", isOn: Binding(get: { model.includeGit }, set: model.showGit))
                 Spacer()
+            }.padding(10)
+            HStack(spacing: 18) {
+                Label("Совпадает", systemImage: "equal.circle").foregroundStyle(.secondary)
                 Label("Изменён", systemImage: "pencil").foregroundStyle(.blue)
                 Label("Только с одной стороны", systemImage: "plus").foregroundStyle(.green)
-            }.padding(10)
+            }.font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.bottom, 8)
             HStack(spacing: 64) {
                 ForEach(model.roots.indices, id: \.self) { side in
                     Label(model.roots[side].path, systemImage: "folder.fill")
@@ -60,7 +73,9 @@ struct Folders: View {
                         ForEach(list) { entry in
                             HStack(spacing: 0) {
                                 cell(entry, kind: entry.left)
-                                HStack {
+                                HStack(spacing: 4) {
+                                    Image(systemName: statusSymbol(entry))
+                                        .foregroundStyle(tint(entry)).accessibilityLabel(entry.status)
                                     if let side = entry.copySource {
                                         Button(side == 0 ? "→" : "←") { model.copyFile(entry) }
                                             .help("Скопировать файл " + entry.path + (side == 0 ? " вправо" : " влево"))
@@ -68,7 +83,7 @@ struct Folders: View {
                                 }.frame(width: 64)
                                 cell(entry, kind: entry.right)
                             }.padding(.horizontal, 8).frame(minHeight: 31)
-                            .background(entry.status == "Совпадает" ? Color.clear : tint(entry).opacity(0.07))
+                            .background(entry.status == "Совпадает" ? Color.clear : tint(entry).opacity(0.14))
                             Divider()
                         }
                     }

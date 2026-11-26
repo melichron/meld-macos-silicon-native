@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ComparisonView: View {
     @ObservedObject var model: Model
+    @ObservedObject var preferences: Preferences
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,6 +15,10 @@ struct ComparisonView: View {
                     Button { model.open(model.roots, folders: true) } label: { Image(systemName: "arrow.clockwise") }
                         .help("Обновить сравнение папок")
                 }
+                Spacer()
+                Picker("Тема", selection: $preferences.theme) {
+                    ForEach(Theme.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }.fixedSize()
             }
             .disabled(model.busy)
             .frame(maxWidth: .infinity, alignment: .leading).padding(10)
@@ -22,10 +27,32 @@ struct ComparisonView: View {
                 if !model.roots.isEmpty { Folders(model: model) }
                 else if model.docs.count == 2 { comparison }
                 else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "folder.badge.gearshape").font(.largeTitle)
-                        Text(model.roots.isEmpty ? "Открой две папки или два файла" : "Выбери файл из списка")
-                    }.foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if preferences.recent.isEmpty {
+                        Text("Открой две папки или два файла").foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        VStack(alignment: .leading) {
+                            Text("Недавние сравнения").font(.title2.bold()).padding(.horizontal)
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 0) {
+                                    ForEach(preferences.recent) { item in
+                                        Button {
+                                            model.newComparison?(item.urls, item.folders)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: item.folders ? "folder" : "doc.text")
+                                                VStack(alignment: .leading) {
+                                                    Text(item.left).lineLimit(1).truncationMode(.middle)
+                                                    Text(item.right).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                                }
+                                            }.padding(9).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                                        }.buttonStyle(.plain).disabled(model.busy)
+                                        Divider()
+                                    }
+                                }.padding(.horizontal)
+                            }
+                        }.padding(.vertical)
+                    }
                 }
             }
             if model.busy {
@@ -147,8 +174,10 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
 }
 
 @MainActor final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
+    let preferences = Preferences()
     var models: [NSWindow: Model] = [:]
     func applicationDidFinishLaunching(_ notification: Notification) {
+        preferences.theme.apply()
         let menu = NSMenu()
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Завершить MeldMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -156,6 +185,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         mainItem.submenu = appMenu
         menu.addItem(mainItem)
         let file = NSMenu(title: "Файл")
+        file.addItem(withTitle: "Недавние сравнения", action: #selector(showHome), keyEquivalent: "n").target = self
         file.addItem(withTitle: "Сохранить изменения", action: #selector(saveComparison), keyEquivalent: "s").target = self
         let fileItem = NSMenuItem()
         fileItem.submenu = file
@@ -180,6 +210,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         if !urls.isEmpty, let existing = models.first(where: { _, model in
             folders ? model.roots == urls : model.docs.map(\.url) == urls
         }) {
+            preferences.record(urls, folders: folders)
             existing.key.makeKeyAndOrderFront(nil)
             return
         }
@@ -199,11 +230,12 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
                 self.present(urls, folders: folders, parent: window)
             }
         }
+        model.didOpen = { [preferences] urls, folders in preferences.record(urls, folders: folders) }
         model.didSave = { [weak self] in
             for m in self?.models.values.filter({ !$0.roots.isEmpty }) ?? [] { m.open(m.roots, folders: true) }
         }
         window.minSize = NSSize(width: 780, height: 420)
-        window.contentView = NSHostingView(rootView: ComparisonView(model: model))
+        window.contentView = NSHostingView(rootView: ComparisonView(model: model, preferences: preferences))
         window.delegate = self
         window.center()
         if let parent { parent.addTabbedWindow(window, ordered: .above) }
@@ -211,6 +243,14 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         if urls.count == 2 { model.open(urls, folders: folders) }
     }
     private var currentModel: Model? { NSApp.keyWindow.flatMap { models[$0] } }
+
+    @objc func showHome() {
+        if let home = models.first(where: { $0.value.roots.isEmpty && $0.value.docs.isEmpty && !$0.value.busy }) {
+            home.key.makeKeyAndOrderFront(nil)
+        } else {
+            present([], folders: false, parent: NSApp.keyWindow)
+        }
+    }
 
     @objc func saveComparison() { currentModel?.save() }
 

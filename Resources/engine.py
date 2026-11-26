@@ -59,13 +59,15 @@ def inline_marks(left, right, op):
     return marks[1], marks[0]
 
 
-def inventory(root):
+def inventory(root, include_git):
     entries = {}
 
     def visit(path):
         try:
             with os.scandir(path) as items:
                 for item in items:
+                    if not include_git and item.name == ".git":
+                        continue
                     rel = os.path.relpath(item.path, root)
                     try:
                         mode = item.stat(follow_symlinks=False).st_mode
@@ -100,8 +102,8 @@ def equal_files(a, b):
                 return True
 
 
-def folders(left, right):
-    a, b = inventory(left), inventory(right)
+def folders(left, right, include_git=False):
+    a, b = inventory(left, include_git), inventory(right, include_git)
     result = []
     for key in sorted(a.keys() | b.keys(), key=lambda p: p.split(os.sep)):
         x, y = a.get(key), b.get(key)
