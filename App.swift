@@ -11,38 +11,38 @@ struct ComparisonView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Две папки…") { model.choose(true) }.keyboardShortcut("o", modifiers: [.command, .shift])
-                Button("Два файла…") { model.choose(false) }.keyboardShortcut("o")
+                Button(tr("Две папки…")) { model.choose(true) }.keyboardShortcut("o", modifiers: [.command, .shift])
+                Button(tr("Два файла…")) { model.choose(false) }.keyboardShortcut("o")
                 if !model.roots.isEmpty {
                     Button { model.open(model.roots, folders: true) } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Обновить сравнение папок")
+                        .help(tr("Обновить сравнение папок"))
                 }
                 Spacer()
-                Picker("Тема", selection: $preferences.theme) {
-                    ForEach(Theme.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                Picker(tr("Тема"), selection: $preferences.theme) {
+                    ForEach(Theme.allCases, id: \.self) { Text(tr($0.rawValue)).tag($0) }
                 }.fixedSize()
             }
             .disabled(model.busy)
             .frame(maxWidth: .infinity, alignment: .leading).padding(10)
             Divider()
             Group {
-                if !model.roots.isEmpty { Folders(model: model) }
+                if !model.roots.isEmpty { Folders(model: model, preferences: preferences) }
                 else if model.docs.count == 2 { comparison }
                 else {
                     if preferences.recent.isEmpty {
-                        Text("Открой две папки или два файла").foregroundStyle(.secondary)
+                        Text(tr("Открой две папки или два файла")).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         VStack(alignment: .leading) {
                             HStack {
-                                Text("Недавние сравнения").font(.title2.bold())
+                                Text(tr("Недавние сравнения")).font(.title2.bold())
                                 Spacer()
-                                Button("Очистить историю…") {
+                                Button(tr("Очистить историю…")) {
                                     let alert = NSAlert()
-                                    alert.messageText = "Очистить историю сравнений?"
-                                    alert.informativeText = "Будут удалены все записи из списка недавних сравнений."
-                                    alert.addButton(withTitle: "Отмена")
-                                    alert.addButton(withTitle: "Очистить историю").hasDestructiveAction = true
+                                    alert.messageText = tr("Очистить историю сравнений?")
+                                    alert.informativeText = tr("Будут удалены все записи из списка недавних сравнений.")
+                                    alert.addButton(withTitle: tr("Отмена"))
+                                    alert.addButton(withTitle: tr("Очистить историю")).hasDestructiveAction = true
                                     if alert.runModal() == .alertSecondButtonReturn { preferences.clearRecent() }
                                 }
                             }.padding(.horizontal)
@@ -67,8 +67,8 @@ struct ComparisonView: View {
                                                 Image(systemName: "xmark.circle")
                                             }
                                             .buttonStyle(.borderless)
-                                            .accessibilityLabel("Убрать из истории: \(item.left) ↔ \(item.right)")
-                                            .help("Убрать эту пару из истории")
+                                            .accessibilityLabel(tr("Убрать эту пару из истории") + ": \(item.left) ↔ \(item.right)")
+                                            .help(tr("Убрать эту пару из истории"))
                                         }
                                         Divider()
                                     }
@@ -80,9 +80,10 @@ struct ComparisonView: View {
             }
             if model.busy {
                 Divider()
-                HStack { ProgressView().controlSize(.small); Text("Сравнение…"); Spacer() }.padding(6)
+                HStack { ProgressView().controlSize(.small); Text(tr("Сравнение…")); Spacer() }.padding(6)
             }
         }
+        .environment(\.locale, Locale(identifier: preferences.language.rawValue))
         .alert("MeldMac", isPresented: Binding(get: { model.message != nil }, set: { if !$0 { model.message = nil } })) {
             Button("OK") { model.message = nil }
         } message: { Text(model.message ?? "") }
@@ -92,26 +93,26 @@ struct ComparisonView: View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
                 HStack {
-                    Picker("Вид", selection: $model.editing) {
-                        Text("Редактор").tag(true)
-                        Text("По блокам").tag(false)
+                    Picker(tr("Вид"), selection: $model.editing) {
+                        Text(tr("Редактор")).tag(true)
+                        Text(tr("По блокам")).tag(false)
                     }.pickerStyle(.segmented).labelsHidden().fixedSize()
                     let changes = model.changes
-                    Menu("Блоки (\(changes.count))") {
+                    Menu(String(format: tr("Блоки (%ld)"), changes.count)) {
                         ForEach(Array(changes.enumerated()), id: \.element.id) { i, change in
-                            Button("Блок \(i + 1) · строка \(change.left.lowerBound + 1)") { model.jump(to: i); proxy.scrollTo("\(change.id)/0", anchor: .top) }
+                            Button(String(format: tr("Блок %ld · строка %ld"), i + 1, change.left.lowerBound + 1)) { model.jump(to: i); proxy.scrollTo("\(change.id)/0", anchor: .top) }
                         }
                     }.fixedSize().disabled(changes.isEmpty || !model.currentDiff)
                     if model.editing, let band = model.selectedChange {
                         Text("\(model.activeBlock + 1)/\(changes.count)").font(.caption)
-                        Button("←") { model.transfer(band, to: 0) }.help("Перенести выбранный блок влево")
-                        Button("→") { model.transfer(band, to: 1) }.help("Перенести выбранный блок вправо")
+                        Button("←") { model.transfer(band, to: 0) }.help(tr("Перенести выбранный блок влево"))
+                        Button("→") { model.transfer(band, to: 1) }.help(tr("Перенести выбранный блок вправо"))
                     }
                     if !model.currentDiff { ProgressView().controlSize(.small) }
                     Spacer()
-                    Button("Отменить") { if let last = model.history.last { model.update(last, undo: true) } }
+                    Button(tr("Отменить")) { if let last = model.history.last { model.update(last, undo: true) } }
                         .disabled(model.history.isEmpty)
-                    Button("Сохранить") { model.save() }.disabled(!model.dirty)
+                    Button(tr("Сохранить")) { model.save() }.disabled(!model.dirty)
                 }.padding(8)
                 HStack(spacing: 56) {
                     ForEach(0..<2) { i in
@@ -134,8 +135,8 @@ struct ComparisonView: View {
                                     line(0, row)
                                     HStack(spacing: 2) {
                                         if row.band.changed && row.offset == 0 {
-                                            Button("←") { model.transfer(row.band, to: 0) }.help("Заменить блок слева версией справа")
-                                            Button("→") { model.transfer(row.band, to: 1) }.help("Заменить блок справа версией слева")
+                                            Button("←") { model.transfer(row.band, to: 0) }.help(tr("Заменить блок слева версией справа"))
+                                            Button("→") { model.transfer(row.band, to: 1) }.help(tr("Заменить блок справа версией слева"))
                                         }
                                     }.controlSize(.small).frame(width: 62)
                                     line(1, row)
@@ -207,29 +208,70 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
     var models: [NSWindow: Model] = [:]
     func applicationDidFinishLaunching(_ notification: Notification) {
         preferences.theme.apply()
+        rebuildMenu()
+        openInitialWindow()
+    }
+
+    func rebuildMenu() {
         let menu = NSMenu()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Завершить MeldMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: tr("Завершить MeldMac"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let languages = NSMenu(title: tr("Язык"))
+        for language in AppLanguage.allCases {
+            let item = languages.addItem(withTitle: language.name, action: #selector(selectLanguage(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = language.rawValue
+            item.state = language == preferences.language ? .on : .off
+        }
+        let languageItem = NSMenuItem()
+        languageItem.submenu = languages
+        appMenu.insertItem(languageItem, at: 0)
+        appMenu.insertItem(.separator(), at: 1)
         let mainItem = NSMenuItem()
         mainItem.submenu = appMenu
         menu.addItem(mainItem)
-        let file = NSMenu(title: "Файл")
-        file.addItem(withTitle: "Недавние сравнения", action: #selector(showHome), keyEquivalent: "n").target = self
-        file.addItem(withTitle: "Сохранить изменения", action: #selector(saveComparison), keyEquivalent: "s").target = self
-        file.addItem(withTitle: "Закрыть вкладку", action: #selector(closeTab), keyEquivalent: "w").target = self
+        let file = NSMenu(title: tr("Файл"))
+        file.addItem(withTitle: tr("Недавние сравнения"), action: #selector(showHome), keyEquivalent: "n").target = self
+        file.addItem(withTitle: tr("Сохранить изменения"), action: #selector(saveComparison), keyEquivalent: "s").target = self
+        file.addItem(withTitle: tr("Закрыть вкладку"), action: #selector(closeTab), keyEquivalent: "w").target = self
         let fileItem = NSMenuItem()
         fileItem.submenu = file
         menu.addItem(fileItem)
-        let edit = NSMenu(title: "Правка")
-        edit.addItem(withTitle: "Отменить правку", action: #selector(undoComparison), keyEquivalent: "z").target = self
+        let edit = NSMenu(title: tr("Правка"))
+        edit.addItem(withTitle: tr("Отменить правку"), action: #selector(undoComparison), keyEquivalent: "z").target = self
         edit.addItem(.separator())
         for (title, selector, key) in [("Вырезать", "cut:", "x"), ("Скопировать", "copy:", "c"), ("Вставить", "paste:", "v"), ("Выбрать всё", "selectAll:", "a")] {
-            edit.addItem(withTitle: title, action: Selector(selector), keyEquivalent: key)
+            edit.addItem(withTitle: tr(title), action: Selector(selector), keyEquivalent: key)
         }
         let editItem = NSMenuItem()
         editItem.submenu = edit
         menu.addItem(editItem)
+        let help = NSMenu(title: tr("Справка"))
+        help.addItem(withTitle: tr("Справка MeldMac"), action: #selector(showGuide), keyEquivalent: "?").target = self
+        let helpItem = NSMenuItem()
+        helpItem.submenu = help
+        menu.addItem(helpItem)
         NSApp.mainMenu = menu
+        NSApp.helpMenu = help
+    }
+
+    @objc func selectLanguage(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String,
+              let language = AppLanguage(rawValue: code) else { return }
+        preferences.language = language
+        rebuildMenu()
+    }
+
+    @objc func showGuide() {
+        let alert = NSAlert()
+        alert.messageText = tr("Справка MeldMac")
+        alert.informativeText = [tr("Сравнение папок"), tr("help.folders"), "",
+                                 tr("Сравнение файлов"), tr("help.files")].joined(separator: "\n")
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func openInitialWindow() {
         let paths = Array(CommandLine.arguments.dropFirst())
         let urls = paths.count == 2 ? paths.map { URL(fileURLWithPath: $0) } : []
         present(urls, folders: urls.first.flatMap { try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory } == true, parent: nil)
@@ -303,9 +345,9 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
 
     func confirmClose() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Закрыть без сохранения изменений?"
-        alert.addButton(withTitle: "Продолжить сравнение")
-        alert.addButton(withTitle: "Закрыть без сохранения")
+        alert.messageText = tr("Закрыть без сохранения изменений?")
+        alert.addButton(withTitle: tr("Продолжить сравнение"))
+        alert.addButton(withTitle: tr("Закрыть без сохранения"))
         return alert.runModal() == .alertSecondButtonReturn
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {

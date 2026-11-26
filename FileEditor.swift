@@ -46,7 +46,6 @@ struct FileEditor: NSViewRepresentable {
         text.autoresizingMask = [.width]
         text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         text.textContainer?.widthTracksTextView = true
-        text.setAccessibilityLabel(side == 0 ? "Левый редактор" : "Правый редактор")
         scroll.documentView = text
         text.delegate = context.coordinator
         context.coordinator.attach(text, scroll: scroll)
@@ -55,6 +54,7 @@ struct FileEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let text = scroll.documentView as? NSTextView else { return }
+        text.setAccessibilityLabel(tr(side == 0 ? "Левый редактор" : "Правый редактор"))
         context.coordinator.refresh(text)
     }
 

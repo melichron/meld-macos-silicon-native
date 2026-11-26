@@ -138,7 +138,7 @@ struct EditorGutter: NSViewRepresentable {
         }
         displayed = (editor.side, band.id, editor.model.revision)
         copyButton.title = editor.side == 0 ? "→" : "←"
-        let label = editor.side == 0 ? "Скопировать блок вправо" : "Скопировать блок влево"
+        let label = editor.side == 0 ? tr("Скопировать блок вправо") : tr("Скопировать блок влево")
         copyButton.toolTip = label
         copyButton.setAccessibilityLabel(label)
         let height: CGFloat = 21

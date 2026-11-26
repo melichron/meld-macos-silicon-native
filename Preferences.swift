@@ -33,6 +33,10 @@ enum Theme: String, CaseIterable {
     private var recordedThisLaunch = false
     private let defaults: UserDefaults
     @Published private(set) var recent: [RecentComparison]
+    @Published var language = AppLanguage.current {
+        didSet { defaults.set(language.rawValue, forKey: "interfaceLanguage") }
+    }
+
     @Published var theme: Theme {
         didSet {
             defaults.set(theme.rawValue, forKey: "theme")

@@ -34,16 +34,16 @@ struct Document {
         self.url = url
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         guard values.isRegularFile == true, (values.fileSize ?? 0) <= 4_000_000 else {
-            throw Problem("Для просмотра нужен обычный текстовый файл до 4 МБ.")
+            throw Problem(tr("Для просмотра нужен обычный текстовый файл до 4 МБ."))
         }
         original = try Data(contentsOf: url)
         bom = original.starts(with: [0xef, 0xbb, 0xbf])
         guard let text = String(data: original.dropFirst(bom ? 3 : 0), encoding: .utf8),
-              !text.utf8.contains(0) else { throw Problem("Файл не является текстом UTF-8.") }
+              !text.utf8.contains(0) else { throw Problem(tr("Файл не является текстом UTF-8.")) }
         let stripped = text.replacingOccurrences(of: "\r\n", with: "")
         let crlf = stripped.utf8.count != text.utf8.count
         guard [crlf, stripped.contains("\r"), stripped.contains("\n")].filter({ $0 }).count <= 1
-        else { throw Problem("Просмотр файлов со смешанными окончаниями строк пока не поддерживается.") }
+        else { throw Problem(tr("Просмотр файлов со смешанными окончаниями строк пока не поддерживается.")) }
         separator = crlf ? "\r\n" : stripped.contains("\r") ? "\r" : "\n"
         lines = text.components(separatedBy: separator)
     }
@@ -55,7 +55,7 @@ struct Document {
     }
     mutating func save() throws {
         guard try Data(contentsOf: url) == original else {
-            throw Problem("Файл изменился на диске. Сохранение остановлено: " + url.path)
+            throw Problem(tr("Файл изменился на диске. Сохранение остановлено:") + " " + url.path)
         }
         let data = bytes
         try data.write(to: url, options: .atomic)
@@ -65,7 +65,7 @@ struct Document {
 
 func engine<T: Decodable>(_ operation: String, _ input: Data) throws -> T {
     guard let script = Bundle.main.url(forResource: "engine", withExtension: "py") else {
-        throw Problem("Не найден модуль сравнения.")
+        throw Problem(tr("Не найден модуль сравнения."))
     }
     let task = Process(), stdin = Pipe(), stdout = Pipe()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
@@ -77,7 +77,7 @@ func engine<T: Decodable>(_ operation: String, _ input: Data) throws -> T {
     try stdin.fileHandleForWriting.close()
     let data = stdout.fileHandleForReading.readDataToEndOfFile()
     task.waitUntilExit()
-    guard task.terminationStatus == 0 else { throw Problem("Ошибка сравнения. Проверь доступ к файлам и наличие Python 3 из Command Line Tools.") }
+    guard task.terminationStatus == 0 else { throw Problem(tr("Ошибка сравнения. Проверь доступ к файлам и наличие Python 3 из Command Line Tools.")) }
     return try JSONDecoder().decode(T.self, from: data)
 }
 
@@ -302,11 +302,12 @@ func compare(_ docs: [Document]) throws -> [Band] {
     }
     func choose(_ folders: Bool) {
         var urls: [URL] = []
-        for side in ["слева", "справа"] {
+        for side in 0..<2 {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = folders
             panel.canChooseFiles = !folders
-            panel.message = "Выбери " + (folders ? "папку " : "файл ") + side
+            panel.message = folders ? tr(side == 0 ? "Выберите левую папку" : "Выберите правую папку")
+                                   : tr(side == 0 ? "Выберите левый файл" : "Выберите правый файл")
             guard panel.runModal() == .OK, let url = panel.url else { return }
             urls.append(url)
         }

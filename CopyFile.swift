@@ -26,7 +26,7 @@ private func parent(_ root: URL, components: ArraySlice<String>, create: Bool) t
 func copyMissing(_ path: String, from source: URL, to destination: URL) throws {
     let parts = path.components(separatedBy: "/")
     guard let name = parts.last, !parts.contains(where: { ["", ".", ".."].contains($0) }) else {
-        throw Problem("Некорректный относительный путь.")
+        throw Problem(tr("Некорректный относительный путь."))
     }
     let src = try parent(source, components: parts.dropLast(), create: false)
     defer { close(src) }
@@ -34,7 +34,7 @@ func copyMissing(_ path: String, from source: URL, to destination: URL) throws {
     defer { close(input) }
     var info = stat()
     _ = try checked(fstat(input, &info))
-    guard info.st_mode & S_IFMT == S_IFREG else { throw Problem("Источник должен быть обычным файлом.") }
+    guard info.st_mode & S_IFMT == S_IFREG else { throw Problem(tr("Источник должен быть обычным файлом.")) }
 
     let dst = try parent(destination, components: parts.dropLast(), create: true)
     defer { close(dst) }

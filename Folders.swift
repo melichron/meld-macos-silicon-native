@@ -13,6 +13,7 @@ private func ancestors(_ path: String) -> [String] {
 
 struct Folders: View {
     @ObservedObject var model: Model
+    @ObservedObject var preferences: Preferences
     private var visible: [Entry] {
         let matches = model.entries.filter {
             (model.showEqual || $0.status != "Совпадает") &&
@@ -46,15 +47,15 @@ struct Folders: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                TextField("Найти по пути", text: $model.search).frame(maxWidth: 280)
-                Toggle("Включая совпадающие", isOn: $model.showEqual)
-                Toggle("Показывать .git", isOn: Binding(get: { model.includeGit }, set: model.showGit))
+                TextField(tr("Найти по пути"), text: $model.search).frame(maxWidth: 280)
+                Toggle(tr("Включая совпадающие"), isOn: $model.showEqual)
+                Toggle(tr("Показывать .git"), isOn: Binding(get: { model.includeGit }, set: model.showGit))
                 Spacer()
             }.padding(10)
             HStack(spacing: 18) {
-                Label("Совпадает", systemImage: "equal.circle").foregroundStyle(.secondary)
-                Label("Изменён", systemImage: "pencil").foregroundStyle(.blue)
-                Label("Только с одной стороны", systemImage: "plus").foregroundStyle(.green)
+                Label(tr("Совпадает"), systemImage: "equal.circle").foregroundStyle(.secondary)
+                Label(tr("Изменён"), systemImage: "pencil").foregroundStyle(.blue)
+                Label(tr("Только с одной стороны"), systemImage: "plus").foregroundStyle(.green)
             }.font(.caption).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.bottom, 8)
             HStack(spacing: 64) {
                 ForEach(model.roots.indices, id: \.self) { side in
@@ -65,7 +66,7 @@ struct Folders: View {
             Divider()
             let list = visible
             if list.isEmpty {
-                Text(model.search.isEmpty ? "В этом представлении нет файлов или папок" : "Совпадений по запросу нет")
+                Text(model.search.isEmpty ? tr("В этом представлении нет файлов или папок") : tr("Совпадений по запросу нет"))
                     .foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -75,10 +76,10 @@ struct Folders: View {
                                 cell(entry, kind: entry.left)
                                 HStack(spacing: 4) {
                                     Image(systemName: statusSymbol(entry))
-                                        .foregroundStyle(tint(entry)).accessibilityLabel(entry.status)
+                                        .foregroundStyle(tint(entry)).accessibilityLabel(tr(entry.status))
                                     if let side = entry.copySource {
                                         Button(side == 0 ? "→" : "←") { model.copyFile(entry) }
-                                            .help("Скопировать файл " + entry.path + (side == 0 ? " вправо" : " влево"))
+                                            .help(tr(side == 0 ? "Скопировать файл вправо" : "Скопировать файл влево") + ": " + entry.path)
                                     }
                                 }.frame(width: 64)
                                 cell(entry, kind: entry.right)
@@ -115,6 +116,6 @@ struct Folders: View {
             }.foregroundStyle(tint(entry))
                 .padding(.leading, CGFloat(min(ancestors(entry.path).count, 12) * 13))
                 .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(entry.path + " · " + entry.status)
+        }.buttonStyle(.plain).help(entry.path + " · " + tr(entry.status))
     }
 }
