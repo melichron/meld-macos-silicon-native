@@ -6,6 +6,14 @@ MeldMac is an independent file and folder comparison app for Apple Silicon. Its 
 
 Requires an Apple Silicon Mac running macOS 14 or later and Python 3 from the Xcode Command Line Tools. If you need the tools, run `xcode-select --install`.
 
+### Homebrew
+
+```sh
+brew install --cask melichron/tap/meldmac
+```
+
+### Disk image
+
 1. [Download the v0.2.0 DMG](https://github.com/melichron/meld-macos-silicon-native/releases/download/v0.2.0/MeldMac-0.2.0-arm64.dmg) or get a newer DMG from the [latest release](https://github.com/melichron/meld-macos-silicon-native/releases/latest).
 2. Open the DMG and drag **MeldMac** onto the **Applications** shortcut.
 3. Eject the disk image and open **MeldMac** from **Applications**.
