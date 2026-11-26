@@ -34,21 +34,42 @@ struct ComparisonView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         VStack(alignment: .leading) {
-                            Text("Недавние сравнения").font(.title2.bold()).padding(.horizontal)
+                            HStack {
+                                Text("Недавние сравнения").font(.title2.bold())
+                                Spacer()
+                                Button("Очистить историю…") {
+                                    let alert = NSAlert()
+                                    alert.messageText = "Очистить историю сравнений?"
+                                    alert.informativeText = "Будут удалены все записи из списка недавних сравнений."
+                                    alert.addButton(withTitle: "Отмена")
+                                    alert.addButton(withTitle: "Очистить историю").hasDestructiveAction = true
+                                    if alert.runModal() == .alertSecondButtonReturn { preferences.clearRecent() }
+                                }
+                            }.padding(.horizontal)
                             ScrollView {
                                 LazyVStack(alignment: .leading, spacing: 0) {
                                     ForEach(preferences.recent) { item in
-                                        Button {
-                                            model.newComparison?(item.urls, item.folders)
-                                        } label: {
-                                            HStack(spacing: 12) {
-                                                Image(systemName: item.folders ? "folder" : "doc.text")
-                                                VStack(alignment: .leading) {
-                                                    Text(item.left).lineLimit(1).truncationMode(.middle)
-                                                    Text(item.right).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                                                }
-                                            }.padding(9).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-                                        }.buttonStyle(.plain).disabled(model.busy)
+                                        HStack {
+                                            Button {
+                                                model.newComparison?(item.urls, item.folders)
+                                            } label: {
+                                                HStack(spacing: 12) {
+                                                    Image(systemName: item.folders ? "folder" : "doc.text")
+                                                    VStack(alignment: .leading) {
+                                                        Text(item.left).lineLimit(1).truncationMode(.middle)
+                                                        Text(item.right).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                                    }
+                                                }.padding(9).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                                            }.buttonStyle(.plain).disabled(model.busy)
+                                            Button {
+                                                preferences.removeRecent(item)
+                                            } label: {
+                                                Image(systemName: "xmark.circle")
+                                            }
+                                            .buttonStyle(.borderless)
+                                            .accessibilityLabel("Убрать из истории: \(item.left) ↔ \(item.right)")
+                                            .help("Убрать эту пару из истории")
+                                        }
                                         Divider()
                                     }
                                 }.padding(.horizontal)

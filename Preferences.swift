@@ -27,6 +27,7 @@ enum Theme: String, CaseIterable {
         let id = UUID()
         let item: RecentComparison
         var succeeded: Bool?
+        var removed = false
     }
     private var pending: [Attempt] = []
     private var recordedThisLaunch = false
@@ -47,6 +48,23 @@ enum Theme: String, CaseIterable {
         theme = defaults.string(forKey: "theme").flatMap(Theme.init(rawValue:)) ?? .system
     }
 
+    func removeRecent(_ item: RecentComparison) {
+        for index in pending.indices where pending[index].item == item {
+            pending[index].removed = true
+        }
+        saveRecent(recent.filter { $0 != item })
+    }
+
+    func clearRecent() {
+        for index in pending.indices { pending[index].removed = true }
+        saveRecent([])
+    }
+
+    private func saveRecent(_ items: [RecentComparison]) {
+        recent = items
+        defaults.set(try? JSONEncoder().encode(items), forKey: "recentComparisons")
+    }
+
     func beginComparison(_ urls: [URL], folders: Bool) -> (Bool) -> Void {
         guard !recordedThisLaunch else { return { _ in } }
         let item = RecentComparison(left: urls[0].standardizedFileURL.path,
@@ -65,8 +83,7 @@ enum Theme: String, CaseIterable {
             if success {
                 recordedThisLaunch = true
                 pending.removeAll()
-                recent = [first.item] + recent.filter { $0 != first.item }.prefix(19)
-                defaults.set(try? JSONEncoder().encode(recent), forKey: "recentComparisons")
+                if !first.removed { saveRecent([first.item] + recent.filter { $0 != first.item }.prefix(19)) }
                 return
             }
         }
