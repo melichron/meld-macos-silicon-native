@@ -1,0 +1,27 @@
+name: Notify Homebrew tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/update-homebrew.yml]
+
+permissions: {}
+
+jobs:
+  notify:
+    if: github.event_name != 'release' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Start the tap update
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::Configure HOMEBREW_TAP_TOKEN with Actions write access to melichron/homebrew-tap. The tap also checks periodically."
+            exit 1
+          fi
+          gh workflow run update-meldmac.yml --repo melichron/homebrew-tap --ref main

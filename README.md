@@ -12,6 +12,12 @@ Requires an Apple Silicon Mac running macOS 14 or later and Python 3 from the Xc
 brew install --cask melichron/tap/meldmac
 ```
 
+To pick up a new release immediately after the tap update finishes:
+
+```sh
+brew update && brew upgrade --cask meldmac
+```
+
 ### Disk image
 
 1. [Download the v0.2.0 DMG](https://github.com/melichron/meld-macos-silicon-native/releases/download/v0.2.0/MeldMac-0.2.0-arm64.dmg) or get a newer DMG from the [latest release](https://github.com/melichron/meld-macos-silicon-native/releases/latest).
@@ -50,6 +56,12 @@ You can edit either pane. After a short pause in typing, the app updates the cha
 Colored ribbons connect the edges of corresponding blocks and taper to a point for insertions and deletions. Use the block menu to jump to a difference in both panes, or switch to the block view to see aligned rows.
 
 Place the caret in a changed block to show a copy arrow on the ribbon beside that line. Clicking it copies the entire block from the active pane to the other pane **in memory**. Press **⌘S** to save or **⌘Z** to undo. The editor supports UTF-8 files up to 4 MB, with one consistent line-ending style per file.
+
+## Maintaining the Homebrew cask
+
+Attach `MeldMac-<version>-arm64.dmg` to a draft GitHub release, then publish it as the latest stable release with a tag such as `v0.2.0`. The **Notify Homebrew tap** workflow starts **Update MeldMac cask** in [the tap](https://github.com/melichron/homebrew-tap/actions/workflows/update-meldmac.yml). The tap verifies the downloaded DMG against GitHub’s SHA-256 before committing the version and checksum to its main branch.
+
+For immediate notification, set the Actions secret `HOMEBREW_TAP_TOKEN` in the MeldMac repository to a fine-grained token scoped to `melichron/homebrew-tap` with **Actions: Read and write**. The tap commits using its own workflow token. It also checks every 15 minutes and supports manual runs to recover missed notifications. If a publishing workflow uses its built-in GitHub token, dispatch the tap workflow explicitly or rely on the scheduled check.
 
 ## License and credits
 
