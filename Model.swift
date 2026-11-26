@@ -142,6 +142,26 @@ func compare(_ docs: [Document]) throws -> [Band] {
     @Published var dirty = false
     @Published var history: [[Document]] = []
 
+    @Published var editing = true
+    @Published private(set) var revision = 0
+    @Published private(set) var comparedRevision = 0
+    @Published var activeBlock = 0
+    @Published var jumpRequest = 0
+    private var diffWorker: Task<Void, Never>?
+    private var lastTypingSide: Int?
+    private var lastTypingTime = Date.distantPast
+    var currentDiff: Bool { comparedRevision == revision }
+    var changes: [Band] { bands.filter(\.changed) }
+    var selectedChange: Band? {
+        guard currentDiff, changes.indices.contains(activeBlock) else { return nil }
+        return changes[activeBlock]
+    }
+
+    func jump(to index: Int) {
+        activeBlock = index
+        jumpRequest += 1
+    }
+
     @Published var collapsed = Set<String>()
     var newComparison: (([URL], Bool) -> Void)?
     var didSave: (() -> Void)?
@@ -196,17 +216,56 @@ func compare(_ docs: [Document]) throws -> [Band] {
         }
     }
 
+    private func remember() {
+        history.append(docs)
+        if history.count > 50 { history.removeFirst() }
+    }
+
+    func edit(_ text: String, side: Int) {
+        let now = Date()
+        if lastTypingSide != side || now.timeIntervalSince(lastTypingTime) > 0.8 { remember() }
+        lastTypingSide = side
+        lastTypingTime = now
+        docs[side].lines = text.components(separatedBy: "\n")
+        changed()
+    }
+
     func update(_ files: [Document], undo: Bool) {
-        work { [self] in
-            let diff = try await Task.detached { try compare(files) }.value
-            if undo { history.removeLast() } else { history.append(docs) }
-            docs = files
-            bands = diff
-            dirty = files.contains { $0.bytes != $0.original }
+        lastTypingSide = nil
+        if undo { history.removeLast() } else { remember() }
+        docs = files
+        changed()
+    }
+
+    private func changed() {
+        dirty = docs.contains { $0.bytes != $0.original }
+        revision += 1
+        guard diffWorker == nil else { return }
+        diffWorker = Task { [weak self] in
+            guard let self else { return }
+            defer { diffWorker = nil }
+            while !currentDiff {
+                let version = revision
+                try? await Task.sleep(nanoseconds: 160_000_000)
+                guard version == revision else { continue }
+                let snapshot = docs
+                do {
+                    let result = try await Task.detached { try compare(snapshot) }.value
+                    guard version == revision else { continue }
+                    bands = result
+                    activeBlock = min(activeBlock, max(0, changes.count - 1))
+                    comparedRevision = version
+                } catch {
+                    guard version == revision else { continue }
+                    message = error.localizedDescription
+                    break
+                }
+            }
         }
     }
 
     func transfer(_ band: Band, to dest: Int) {
+        guard currentDiff else { return }
         var files = docs
         let src = 1 - dest
         let ranges = [band.left, band.right]
@@ -221,6 +280,7 @@ func compare(_ docs: [Document]) throws -> [Band] {
                 try docs[i].save()
                 history = []
             }
+            lastTypingSide = nil
             dirty = false
             didSave?()
         } catch { message = error.localizedDescription }

@@ -42,16 +42,26 @@ struct ComparisonView: View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
                 HStack {
-                    let changes = model.bands.filter(\.changed)
+                    Picker("Вид", selection: $model.editing) {
+                        Text("Редактор").tag(true)
+                        Text("По блокам").tag(false)
+                    }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    let changes = model.changes
                     Menu("Блоки (\(changes.count))") {
                         ForEach(Array(changes.enumerated()), id: \.element.id) { i, change in
-                            Button("Блок \(i + 1) · строка \(change.left.lowerBound + 1)") { proxy.scrollTo("\(change.id)/0", anchor: .top) }
+                            Button("Блок \(i + 1) · строка \(change.left.lowerBound + 1)") { model.jump(to: i); proxy.scrollTo("\(change.id)/0", anchor: .top) }
                         }
-                    }.fixedSize().disabled(changes.isEmpty)
+                    }.fixedSize().disabled(changes.isEmpty || !model.currentDiff)
+                    if model.editing, let band = model.selectedChange {
+                        Text("\(model.activeBlock + 1)/\(changes.count)").font(.caption)
+                        Button("←") { model.transfer(band, to: 0) }.help("Перенести выбранный блок влево")
+                        Button("→") { model.transfer(band, to: 1) }.help("Перенести выбранный блок вправо")
+                    }
+                    if !model.currentDiff { ProgressView().controlSize(.small) }
                     Spacer()
                     Button("Отменить") { if let last = model.history.last { model.update(last, undo: true) } }
-                        .keyboardShortcut("z").disabled(model.history.isEmpty)
-                    Button("Сохранить") { model.save() }.keyboardShortcut("s").disabled(!model.dirty)
+                        .disabled(model.history.isEmpty)
+                    Button("Сохранить") { model.save() }.disabled(!model.dirty)
                 }.padding(8)
                 HStack(spacing: 56) {
                     ForEach(0..<2) { i in
@@ -60,23 +70,31 @@ struct ComparisonView: View {
                     }
                 }.padding(8)
                 Divider()
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(model.rows) { row in
-                            HStack(alignment: .top, spacing: 0) {
-                                line(0, row)
-                                HStack(spacing: 2) {
-                                    if row.band.changed && row.offset == 0 {
-                                        Button("←") { model.transfer(row.band, to: 0) }.help("Заменить блок слева версией справа")
-                                        Button("→") { model.transfer(row.band, to: 1) }.help("Заменить блок справа версией слева")
-                                    }
-                                }.controlSize(.small).frame(width: 62)
-                                line(1, row)
-                            }.padding(.vertical, 2)
-                            .background(row.band.changed ? (row.band.left.isEmpty || row.band.right.isEmpty ? Color.green : Color.blue).opacity(0.22) : Color.clear)
+                if model.editing {
+                    HStack(spacing: 0) {
+                        FileEditor(model: model, side: 0)
+                        Divider()
+                        FileEditor(model: model, side: 1)
+                    }
+                } else if model.currentDiff {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(model.rows) { row in
+                                HStack(alignment: .top, spacing: 0) {
+                                    line(0, row)
+                                    HStack(spacing: 2) {
+                                        if row.band.changed && row.offset == 0 {
+                                            Button("←") { model.transfer(row.band, to: 0) }.help("Заменить блок слева версией справа")
+                                            Button("→") { model.transfer(row.band, to: 1) }.help("Заменить блок справа версией слева")
+                                        }
+                                    }.controlSize(.small).frame(width: 62)
+                                    line(1, row)
+                                }.padding(.vertical, 2)
+                                .background(row.band.changed ? (row.band.left.isEmpty || row.band.right.isEmpty ? Color.green : Color.blue).opacity(0.22) : Color.clear)
+                            }
                         }
                     }
-                }
+                } else { Spacer() }
             }.disabled(model.busy)
         }
     }
@@ -128,7 +146,7 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
     return Text(result)
 }
 
-@MainActor final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+@MainActor final class Delegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
     var models: [NSWindow: Model] = [:]
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -137,8 +155,15 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         let mainItem = NSMenuItem()
         mainItem.submenu = appMenu
         menu.addItem(mainItem)
+        let file = NSMenu(title: "Файл")
+        file.addItem(withTitle: "Сохранить изменения", action: #selector(saveComparison), keyEquivalent: "s").target = self
+        let fileItem = NSMenuItem()
+        fileItem.submenu = file
+        menu.addItem(fileItem)
         let edit = NSMenu(title: "Правка")
-        for (title, selector, key) in [("Скопировать", "copy:", "c"), ("Вставить", "paste:", "v"), ("Выбрать всё", "selectAll:", "a")] {
+        edit.addItem(withTitle: "Отменить правку", action: #selector(undoComparison), keyEquivalent: "z").target = self
+        edit.addItem(.separator())
+        for (title, selector, key) in [("Вырезать", "cut:", "x"), ("Скопировать", "copy:", "c"), ("Вставить", "paste:", "v"), ("Выбрать всё", "selectAll:", "a")] {
             edit.addItem(withTitle: title, action: Selector(selector), keyEquivalent: key)
         }
         let editItem = NSMenuItem()
@@ -185,6 +210,22 @@ private func highlightedLine(_ line: String, spans: [InlineSpan]) -> Text {
         window.makeKeyAndOrderFront(nil)
         if urls.count == 2 { model.open(urls, folders: folders) }
     }
+    private var currentModel: Model? { NSApp.keyWindow.flatMap { models[$0] } }
+
+    @objc func saveComparison() { currentModel?.save() }
+
+    @objc func undoComparison() {
+        if let model = currentModel, let previous = model.history.last { model.update(previous, undo: true) }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(saveComparison): return currentModel?.dirty == true
+        case #selector(undoComparison): return currentModel?.history.isEmpty == false
+        default: return true
+        }
+    }
+
     func confirmClose() -> Bool {
         let alert = NSAlert()
         alert.messageText = "Закрыть без сохранения изменений?"
